@@ -41,7 +41,7 @@ app = Flask(__name__)
 user_links = {}     # user_id → list of link_ids
 link_owner = {}     # link_id → user_id
 
-# ──── Welcome message with disclaimer ────
+# ──── Welcome message with disclaimer (no Markdown parsing issues) ────
 @bot.message_handler(commands=['start'])
 def welcome(msg):
     text = f"""
@@ -49,7 +49,7 @@ def welcome(msg):
 
 اهلا وسهلا يا {msg.from_user.first_name} 👋
 
-هذا البوت تم تطويره من قبل **أبو عزام** لأغراض تعليمية وبحثية فقط.
+هذا البوت تم تطويره من قبل أبو عزام لأغراض تعليمية وبحثية فقط.
 أنا غير مسؤول عن أي استخدام خاطئ أو غير قانوني لهذا الأداة.
 استخدمه على مسؤوليتك الشخصية الكاملة ⚠️
 
@@ -66,7 +66,7 @@ def welcome(msg):
     kb = InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton("🛡️ توليد رابط فحص أمان جديد", callback_data="generate_link"))
 
-    bot.send_message(msg.chat.id, text, reply_markup=kb, parse_mode='Markdown')
+    bot.send_message(msg.chat.id, text, reply_markup=kb)
 
 
 # ──── Generate short unique link ────
@@ -87,7 +87,7 @@ def gen_link(call):
 تم توليد رابط فريد خاص بك ✓
 
 الرابط:  
-`{short_link}`
+{short_link}
 
 انسخه وأرسله لمن تريد (واتساب، رسائل، إلخ)
 
@@ -102,7 +102,7 @@ def gen_link(call):
     kb.add(InlineKeyboardButton("🔄 توليد رابط آخر", callback_data="generate_link"))
     kb.add(InlineKeyboardButton("📋 عرض روابطي السابقة", callback_data="my_links"))
 
-    bot.edit_message_text(text, call.message.chat.id, call.message.id, reply_markup=kb, parse_mode='Markdown')
+    bot.edit_message_text(text, call.message.chat.id, call.message.id, reply_markup=kb)
 
 
 # ──── Show previous links ────
@@ -116,12 +116,12 @@ def show_links(call):
     text = "روابطك السابقة:\n\n"
     base_url = request.host_url.rstrip('/')
     for lid in user_links[user_id]:
-        text += f"• `{base_url}/check/{lid}`\n"
+        text += f"• {base_url}/check/{lid}\n"
 
     kb = InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton("🛡️ توليد رابط جديد", callback_data="generate_link"))
 
-    bot.edit_message_text(text, call.message.chat.id, call.message.id, reply_markup=kb, parse_mode='Markdown')
+    bot.edit_message_text(text, call.message.chat.id, call.message.id, reply_markup=kb)
 
 
 # ──── Fake "Secure Scan" page ────
